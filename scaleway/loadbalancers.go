@@ -19,6 +19,7 @@ package scaleway
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"reflect"
 	"sort"
@@ -165,6 +166,8 @@ const (
 	serviceAnnotationLoadBalancerPrivateNetworks = "service.beta.kubernetes.io/scw-loadbalancer-private-networks"
 )
 
+const MaxEntriesPerACL = 60
+
 type loadbalancers struct {
 	api           LoadBalancerAPI
 	client        *client // for patcher
@@ -195,6 +198,7 @@ type LoadBalancerAPI interface {
 	ListLBPrivateNetworks(req *scwlb.ZonedAPIListLBPrivateNetworksRequest, opts ...scw.RequestOption) (*scwlb.ListLBPrivateNetworksResponse, error)
 	AttachPrivateNetwork(req *scwlb.ZonedAPIAttachPrivateNetworkRequest, opts ...scw.RequestOption) (*scwlb.PrivateNetwork, error)
 	DetachPrivateNetwork(req *scwlb.ZonedAPIDetachPrivateNetworkRequest, opts ...scw.RequestOption) error
+	SetACLs(req *scwlb.ZonedAPISetACLsRequest, opts ...scw.RequestOption) (*scwlb.SetACLsResponse, error)
 }
 
 func newLoadbalancers(client *client, defaultLBType string) *loadbalancers {
@@ -786,48 +790,50 @@ func (l *loadbalancers) updateLoadBalancer(ctx context.Context, loadbalancer *sc
 			aclIPs := extractNodesInternalIps(nodes)
 			aclIPs = append(aclIPs, extractNodesExternalIps(nodes)...)
 			aclIPs = append(aclIPs, service.Spec.LoadBalancerSourceRanges...)
-			aclIPsPtr := make([]*string, len(aclIPs))
+			aclIPsPtr := []*string{}
+			newAcls := []*scwlb.ACLSpec{}
+
+			// Loop through all addresses and make sure to split ACLs every MaxEntriesPerACL.
 			for i := range aclIPs {
-				aclIPsPtr[i] = &aclIPs[i]
+				if i != 0 && i%MaxEntriesPerACL == 0 {
+					aclIndex := int32((i / MaxEntriesPerACL) - 1)
+					newAcls = append(newAcls, &scwlb.ACLSpec{
+						Name: fmt.Sprintf("%v-%d", aclName, aclIndex),
+						Action: &scwlb.ACLAction{
+							Type: scwlb.ACLActionTypeAllow,
+						},
+						Index: aclIndex,
+						Match: &scwlb.ACLMatch{
+							IPSubnet: aclIPsPtr,
+						},
+					})
+
+					aclIPsPtr = []*string{}
+				}
+				aclIPsPtr = append(aclIPsPtr, &aclIPs[i])
 			}
 
-			if len(acls.ACLs) != 1 {
-				_, err := l.api.CreateACL(&scwlb.ZonedAPICreateACLRequest{
-					Zone:       loadbalancer.Zone,
-					FrontendID: frontendID,
-					Name:       aclName,
-					Action: &scwlb.ACLAction{
-						Type: scwlb.ACLActionTypeDeny,
-					},
-					Index: 0,
-					Match: &scwlb.ACLMatch{
-						IPSubnet: aclIPsPtr,
-						Invert:   true,
-					},
-				})
-				if err != nil {
-					return err
-				}
-			} else if len(acls.ACLs) == 1 {
-				_, err := l.api.UpdateACL(&scwlb.ZonedAPIUpdateACLRequest{
-					Zone:   loadbalancer.Zone,
-					ACLID:  acls.ACLs[0].ID,
-					Action: &scwlb.ACLAction{
-						Type: scwlb.ACLActionTypeDeny,
-					},
-					Index: 0,
-					Match: &scwlb.ACLMatch{
-						Invert:   true,
-						IPSubnet: aclIPsPtr,
-					},
-					Name: aclName,
-				})
-				if err != nil {
-					return err
-				}
+			// Add last ACL with remaining addresses.
+			newAcls = append(newAcls, &scwlb.ACLSpec{
+				Name: aclName + "-end",
+				Action: &scwlb.ACLAction{
+					Type: scwlb.ACLActionTypeDeny,
+				},
+				Index: math.MaxInt32,
+				Match: &scwlb.ACLMatch{
+					IPSubnet: aclIPsPtr,
+					Invert:   true,
+				},
+			})
 
+			_, err := l.api.SetACLs(&scwlb.ZonedAPISetACLsRequest{
+				Zone:       loadbalancer.Zone,
+				FrontendID: frontendID,
+				ACLs:       newAcls,
+			})
+			if err != nil {
+				return err
 			}
-
 		}
 	}
 
