@@ -173,7 +173,10 @@ func (s *syncController) syncNodeTags(node *v1.Node) error {
 	if node.Spec.ProviderID == "" {
 		klog.Warningf("provider ID is empty for node %s, ignoring", node.Name)
 		return nil
+	} else {
+		klog.Infof("syncing node %s with provider ID %s", node.Name, node.Spec.ProviderID)
 	}
+
 	serverType, serverZone, serverID, err := ServerInfoFromProviderID(node.Spec.ProviderID)
 	if err != nil {
 		klog.Errorf("error getting server info from provider ID %s on node %s: %v", node.Spec.ProviderID, node.Name, err)
@@ -195,6 +198,7 @@ func (s *syncController) syncNodeTags(node *v1.Node) error {
 		})
 
 		if err != nil {
+			klog.Errorf("error getting node info: %v", err)
 			return err
 		}
 
@@ -206,6 +210,7 @@ func (s *syncController) syncNodeTags(node *v1.Node) error {
 		})
 
 		if err != nil {
+			klog.Errorf("error getting node info: %v", err)
 			return err
 		}
 
