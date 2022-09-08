@@ -69,7 +69,7 @@ func (b *baremetal) InstanceID(ctx context.Context, nodeName types.NodeName) (st
 	if err != nil {
 		return "", err
 	}
-	return BuildProviderID(InstanceTypeBaremtal, string(baremetalServer.Zone), baremetalServer.ID), nil
+	return BuildProviderID(InstanceTypeBaremetal, string(baremetalServer.Zone), baremetalServer.ID), nil
 }
 
 // InstanceType returns the type of the specified instance.
@@ -334,7 +334,7 @@ func (b *baremetal) InstanceMetadata(ctx context.Context, node *v1.Node) (*cloud
 	}
 
 	return &cloudprovider.InstanceMetadata{
-		ProviderID:    BuildProviderID(InstanceTypeBaremtal, bm.Zone.String(), bm.ID),
+		ProviderID:    BuildProviderID(InstanceTypeBaremetal, bm.Zone.String(), bm.ID),
 		InstanceType:  offerName,
 		NodeAddresses: baremetalAddresses(bm),
 		Region:        region.String(),

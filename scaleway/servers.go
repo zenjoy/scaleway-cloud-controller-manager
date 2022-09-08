@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	InstanceTypeInstance = "instance"
-	InstanceTypeBaremtal = "baremetal"
+	InstanceTypeInstance  = "instance"
+	InstanceTypeBaremetal = "baremetal"
 
 	// nodeLabelDisableLifeCycle is a label for nulling cloudprovider.InstancesV2 interface
 	nodeLabelDisableLifeCycle = "k8s.scw.cloud/disable-lifecycle"
@@ -82,7 +82,7 @@ func BuildProviderID(product, localization, id string) string {
 // getImplementationByProviderID returns the corresponding cloudprovider.Instances implementation
 // At scaleway, the new baremetal offer is not integrated with instance API.
 func (s *servers) getImplementationByProviderID(providerID string) Servers {
-	if strings.HasPrefix(providerID, ProviderName+"://"+InstanceTypeBaremtal) {
+	if strings.HasPrefix(providerID, ProviderName+"://"+InstanceTypeBaremetal) {
 		return s.baremetal
 	}
 	return s.instances

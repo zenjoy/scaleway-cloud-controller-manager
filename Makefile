@@ -1,6 +1,6 @@
 OS ?= $(shell go env GOOS)
 ARCH ?= $(shell go env GOARCH)
-ALL_PLATFORM = linux/amd64,linux/arm/v7,linux/arm64
+ALL_PLATFORM = linux/amd64,linux/arm64
 
 BUILD_DATE ?= $(shell date -Is)
 
@@ -43,7 +43,7 @@ docker-build:
 .PHONY: docker-buildx-all
 docker-buildx-all:
 	@echo "Making release for tag $(IMAGE_TAG)"
-	docker buildx build --build-arg TAG=$(TAG) --build-arg COMMIT_SHA=$(COMMIT_SHA) --build-arg BUILD_DATE=$(BUILD_DATE) --platform=$(ALL_PLATFORM) --push -t $(FULL_IMAGE):$(IMAGE_TAG) .
+	docker buildx build --builder multiarch-builder --build-arg TAG=$(TAG) --build-arg COMMIT_SHA=$(COMMIT_SHA) --build-arg BUILD_DATE=$(BUILD_DATE) --platform=$(ALL_PLATFORM) --push -t $(FULL_IMAGE):$(IMAGE_TAG) .
 
 ## Release
 .PHONY: release

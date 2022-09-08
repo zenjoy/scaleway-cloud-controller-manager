@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	scwbaremetal "github.com/scaleway/scaleway-sdk-go/api/baremetal/v1"
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	"github.com/scaleway/scaleway-sdk-go/api/lb/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
@@ -40,6 +41,7 @@ type syncController struct {
 	client            *client
 	lbAPI             LoadBalancerAPI
 	instanceAPI       InstanceAPI
+	baremetalAPI      BaremetalAPI
 	clientSet         clientset.Interface
 	nodeIndexer       cache.Indexer
 	nodeController    cache.Controller
@@ -94,6 +96,7 @@ func newSyncController(client *client, clientset clientset.Interface, cacheUpdat
 		client:            client,
 		clientSet:         clientset,
 		instanceAPI:       instance.NewAPI(client.scaleway),
+		baremetalAPI:      scwbaremetal.NewAPI(client.scaleway),
 		lbAPI:             lb.NewZonedAPI(client.scaleway),
 		nodeIndexer:       nodeIndexer,
 		nodeController:    nodeController,
@@ -176,21 +179,40 @@ func (s *syncController) syncNodeTags(node *v1.Node) error {
 		klog.Errorf("error getting server info from provider ID %s on node %s: %v", node.Spec.ProviderID, node.Name, err)
 		return fmt.Errorf("error getting server info from provider ID %s on node %s: %v", node.Spec.ProviderID, node.Name, err)
 	}
-	if serverType != InstanceTypeInstance {
-		klog.Warningf("server type %s is not supported yet for node %s, ignoring", serverType, node.Name)
-		return nil
-	}
+
 	scwZone, err := scw.ParseZone(serverZone)
 	if err != nil {
 		klog.Errorf("error parsing provider ID zone %s for node %s: %v", serverZone, node.Name, err)
 		return fmt.Errorf("error parsing provider ID zone %s for node %s: %v", serverZone, node.Name, err)
 	}
-	server, err := s.instanceAPI.GetServer(&instance.GetServerRequest{
-		Zone:     scwZone,
-		ServerID: serverID,
-	})
-	if err != nil {
-		return err
+
+	serverTags := []string{}
+
+	if serverType == InstanceTypeInstance {
+		server, err := s.instanceAPI.GetServer(&instance.GetServerRequest{
+			Zone:     scwZone,
+			ServerID: serverID,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		serverTags = server.Server.Tags
+	} else if serverType == InstanceTypeBaremetal {
+		server, err := s.baremetalAPI.GetServer(&scwbaremetal.GetServerRequest{
+			Zone:     scwZone,
+			ServerID: serverID,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		serverTags = server.Tags
+	} else {
+		klog.Warningf("server type %s is not supported yet for node %s, ignoring", serverType, node.Name)
+		return nil
 	}
 
 	nodeCopied := node.DeepCopy()
@@ -202,7 +224,7 @@ func (s *syncController) syncNodeTags(node *v1.Node) error {
 
 	nodeLabels := map[string]string{}
 	nodeTaints := []v1.Taint{}
-	for _, tag := range server.Server.Tags {
+	for _, tag := range serverTags {
 		if strings.HasPrefix(tag, labelTaintPrefix) {
 			key, value, effect := tagTaintParser(tag)
 			if key == "" {
