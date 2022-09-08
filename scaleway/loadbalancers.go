@@ -1026,6 +1026,9 @@ func (l *loadbalancers) makeCreateBackendRequest(loadbalancer *scwlb.LB, nodePor
 	} else {
 		serverIPs = extractNodesExternalIps(nodes)
 	}
+
+	klog.Infof("creating new backend for LB %s/%s using following ids: %v", loadbalancer.Zone, loadbalancer.ID, serverIPs)
+
 	request := &scwlb.ZonedAPICreateBackendRequest{
 		Zone:            loadbalancer.Zone,
 		LBID:            loadbalancer.ID,
