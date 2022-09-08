@@ -409,12 +409,16 @@ func extractNodesExternalIps(nodes []*v1.Node) []string {
 	return nodesList
 }
 
+func IsIPv4(address string) bool {
+	return strings.Count(address, ":") < 2
+}
+
 // get the internal nodes ip addresses
 func extractNodesInternalIps(nodes []*v1.Node) []string {
 	var nodesList []string
 	for _, node := range nodes {
 		for _, address := range node.Status.Addresses {
-			if address.Type == v1.NodeInternalIP {
+			if address.Type == v1.NodeInternalIP && IsIPv4(address.Address) {
 				nodesList = append(nodesList, address.Address)
 			}
 		}
